@@ -24,3 +24,5 @@ Easier than making an appointment with your advisor
 4 - confirm with running /mcp on Chatgpt CLI or viewing list of MCP's on Chatgpt Desktop
 
 
+# Deployment 
+- Plan is to deploy on Horizon
