@@ -11,15 +11,27 @@ dependencies = [
     "fastmcp>=4.0.5",
     "python-dotenv>=1.2.3",
     "supabase>=2.31.0",
+    "toon-format",
 ]
 
 [project.scripts]
 courses-mcp = "src.server:mcp.run"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [build-system]
 requires = ["uv_build>=0.12.17,<0.13.0"]
 build-backend = "uv_build"
 
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
 [tool.uv.build-backend]
 module-name = "src"
 module-root = ""
+
+[tool.uv.sources]
+toon-format = { git = "https://github.com/toon-format/toon-python.git" }

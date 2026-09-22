@@ -15,6 +15,10 @@ Easier than making an appointment with your advisor
 
 # Local Testing 
 
+Run all automated tests with `./run_tests.sh`. The script uses uv to install
+development dependencies and run pytest. Pass pytest options as needed, for
+example `./run_tests.sh -v` or `./run_tests.sh -k course_details`.
+
 1 - Download Chatgpt on Desktop 
 2 - Go to Settings and add an MCP 
 3 - Connect using `stdio` and enter: 
