@@ -1,13 +1,9 @@
-import sys
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
 from toon_format import decode
-from tools.courses import course_details
+from src.tools.courses import course_details
 
 
 class CourseDetailsTests(unittest.TestCase):
@@ -19,8 +15,9 @@ class CourseDetailsTests(unittest.TestCase):
         query.execute.side_effect = [SimpleNamespace(data=page) for page in pages]
         return query
 
-    @patch("tools.courses.supabase")
-    def test_multiple_codes_pagination_and_nested_toon(self, client):
+    @patch("src.tools.courses.get_supabase")
+    def test_multiple_codes_pagination_and_nested_toon(self, get_client):
+        client = get_client.return_value
         first = {"code": "A", "metadata": {"description": "One, two\nthree", "credits": 4}}
         last = {"code": "B", "metadata": None}
         query = self.make_query(client, [[last], [first], []])
@@ -34,22 +31,26 @@ class CourseDetailsTests(unittest.TestCase):
         self.assertEqual([call.args for call in query.range.call_args_list],
                          [(0, 999), (1, 1000), (2, 1001)])
 
-    @patch("tools.courses.supabase")
-    def test_single_code(self, client):
+    @patch("src.tools.courses.get_supabase")
+    def test_single_code(self, get_client):
+        client = get_client.return_value
         row = {"code": "A", "metadata": {"description": "A course"}}
         self.make_query(client, [[row], []])
         self.assertEqual(decode(course_details(["A"])), {"courses": [row]})
 
-    @patch("tools.courses.supabase")
-    def test_no_matches(self, client):
+    @patch("src.tools.courses.get_supabase")
+    def test_no_matches(self, get_client):
+        client = get_client.return_value
         self.make_query(client, [[]])
         self.assertEqual(decode(course_details(["Unknown"])), {"courses": []})
 
-    @patch("tools.courses.supabase")
-    def test_invalid_codes_fail_before_query(self, client):
+    @patch("src.tools.courses.get_supabase")
+    def test_invalid_codes_fail_before_query(self, get_client):
+        client = get_client.return_value
         for codes in ([], [""], [" "], ["A", ""], [None], [123]):
             with self.subTest(codes=codes), self.assertRaises(ValueError):
                 course_details(codes)
+        get_client.assert_not_called()
         client.table.assert_not_called()
 
 
