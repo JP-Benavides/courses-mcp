@@ -222,3 +222,6 @@ __marimo__/
 # macOS metadata
 .DS_Store
 ._*
+
+# Local JWT signing keys and credentials
+.auth/

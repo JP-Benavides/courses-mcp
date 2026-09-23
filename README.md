@@ -11,39 +11,57 @@ Easier than making an appointment with your advisor
 - Hosting - Cloudflare 
 
 
-# Start MCP 
-`uv run courses-mcp`
+# Start Local MCP
 
-Starts Streamable HTTP at `http://127.0.0.1:8000/mcp`.
-Direct execution with `python src/server.py` is also supported.
+You need `uv` and OpenSSL installed. Run these commands from the project folder.
 
-- If running with stdio, change server.py to say `mcp.run()`
-or
-- If running with Streamable HTTP, change server.py to say `mcp.run(transport="http", host="127.0.0.1", port=8000)`
+**1. Set up your environment.** Copy `.env.example` to `.env` if you don't already
+have one, then fill in `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`.
 
-- Each developer creates their own ngrok tunnel to their local server on port `8000` using `ngrok http 8000`.
-- Each developer is responsible for configuring authentication and access control before exposing their server. Owning the tunnel does not authenticate callers.
+**2. Create auth keys once.** Skip this if `.auth/private.pem` and `.auth/public.pem` already exist.
 
-- Add /mcp to the end of the ngrok URL, when adding the MCP to your LLM provider
+```bash
+mkdir -p .auth
+chmod 700 .auth
+(umask 077; openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out .auth/private.pem)
+openssl pkey -in .auth/private.pem -pubout -out .auth/public.pem
+```
 
+**3. Generate your token and start the server.** Replace `jp` with your name.
 
+```bash
+uv run python -m src.middleware.auth.generate_bearer_token jp
+uv run courses-mcp
+```
 
+**4. Connect your MCP client.**
 
+- URL: `http://127.0.0.1:8000/mcp`
+- Authorization header: `Bearer <paste your token here>`
+
+Tokens last 24 hours. Run the token command again when yours expires.
+Keep tokens and `.auth/private.pem` private.
+
+For remote access, run `ngrok http 8000` and use `https://<your-tunnel-host>/mcp`
+with the same token.
+
+### How auth works
+
+The private key signs a token containing your name, expiration time, and
+`courses:read` permission. Your client sends that token with each request.
+The server uses the public key to check the signature, expiration, expected
+issuer and audience, and permission before allowing access.
+
+This is manual token authentication: there is no login page or OAuth flow.
+Anyone holding a token can use it until it expires. Individual tokens cannot
+currently be revoked; replacing the key pair and restarting the server
+invalidates all old tokens.
 
 # Local Testing 
 
 Run all automated tests with `./run_tests.sh`. The script uses uv to install
 development dependencies and run pytest. Pass pytest options as needed, for
 example `./run_tests.sh -v` or `./run_tests.sh -k course_details`.
-
-1 - Download Chatgpt on Desktop 
-2 - Go to Settings and add an MCP 
-3 - Connect using `stdio` and enter: 
-    - Command to Launch -> uv 
-    - Arguments -> run, src/server.py 
-    - Working Directory -> Location of `courses-mcp` folder 
-- confirm with running /mcp on Chatgpt CLI or viewing list of MCP's on Chatgpt Desktop
-
 
 # Deployment 
 - Plan is to deploy on Cloudflare
