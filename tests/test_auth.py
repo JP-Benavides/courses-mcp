@@ -9,8 +9,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastmcp.server.auth.providers.jwt import JWTVerifier
 from starlette.testclient import TestClient
 
-from src.middleware.auth.generate_bearer_token import generate_bearer_token
-from src.server import create_server
+from src.middleware.auth.generate_bearer_token import create_server, generate_bearer_token
 
 
 @pytest.fixture

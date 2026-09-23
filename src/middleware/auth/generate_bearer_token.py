@@ -1,15 +1,44 @@
 """Issue a locally signed JWT for a developer; only the issuer needs the private key."""
 
 import argparse
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
 import jwt
+from dotenv import load_dotenv
+from fastmcp import FastMCP
+from fastmcp.server.auth.providers.jwt import JWTVerifier
+from fastmcp.server.providers import FileSystemProvider
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_ISSUER = "courses-mcp-local"
 DEFAULT_AUDIENCE = "courses-mcp"
+
+
+def create_server() -> FastMCP:
+    project_root = PROJECT_ROOT
+    load_dotenv(project_root / ".env")
+    public_key_path = Path(os.environ.get("MCP_JWT_PUBLIC_KEY_FILE", ".auth/public.pem"))
+    if not public_key_path.is_absolute():
+        public_key_path = project_root / public_key_path
+    issuer = os.environ.get("MCP_JWT_ISSUER", DEFAULT_ISSUER)
+    audience = os.environ.get("MCP_JWT_AUDIENCE", DEFAULT_AUDIENCE)
+    if not issuer.strip() or not audience.strip():
+        raise ValueError("MCP_JWT_ISSUER and MCP_JWT_AUDIENCE must not be blank.")
+    # Missing or invalid public keys stop startup; HTTP never falls back to anonymous.
+    auth = JWTVerifier(
+        public_key=public_key_path.read_text(),
+        algorithm="RS256",
+        issuer=issuer,
+        audience=audience,
+        required_scopes=["courses:read"],
+    )
+    return FastMCP(
+        "AdvisorMCP", auth=auth,
+        providers=[FileSystemProvider(project_root / "src" / "tools")],
+    )
 
 
 def generate_bearer_token(
@@ -45,6 +74,7 @@ def generate_bearer_token(
     )
 
 
+# Create a bearer token using the existing private key.
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("developer_id")

@@ -23,15 +23,24 @@ have one, then fill in `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`.
 ```bash
 mkdir -p .auth
 chmod 700 .auth
-(umask 077; openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out .auth/private.pem)
-openssl pkey -in .auth/private.pem -pubout -out .auth/public.pem
+(umask 077; openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out .auth/private.pem) #creates private key 
+openssl pkey -in .auth/private.pem -pubout -out .auth/public.pem #creates public key 
 ```
 
 **3. Generate your token and start the server.** Replace `jp` with your name.
 
 ```bash
 uv run python -m src.middleware.auth.generate_bearer_token jp
-uv run courses-mcp
+```
+
+-You can also run this instead, if you want to have a token with a specific amount of validity time (in hours).ok
+```bash
+uv run python -m src.middleware.auth.generate_bearer_token jp --hours 720 
+```
+
+-Start Server
+```bash
+uv run python -m src.server
 ```
 
 **4. Connect your MCP client.**
