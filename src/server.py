@@ -5,4 +5,4 @@ from fastmcp.server.providers import FileSystemProvider
 mcp = FastMCP("AdvisorMCP", providers=[FileSystemProvider(Path(__file__).parent/ "tools")])
 
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(transport="http", host="127.0.0.1", port=8000)
