@@ -8,6 +8,7 @@ Easier than making an appointment with your advisor
 - Language - Python 
 - DB - Supabase 
 - Package manager - uv 
+- Hosting - Cloudflare 
 
 
 # Start MCP 
@@ -15,13 +16,13 @@ Easier than making an appointment with your advisor
 
 # Local Testing 
 
-1 - Download Chatgpt on Desktop 
-2 - Go to Settings and add an MCP 
-3 - Connect using `stdio` and enter: 
+- Download Chatgpt on Desktop 
+- Go to Settings and add an MCP 
+- Connect using `stdio` and enter: 
     - Command to Launch -> uv 
     - Arguments -> run, src/server.py 
     - Working Directory -> Location of `courses-mcp` folder 
-4 - confirm with running /mcp on Chatgpt CLI or viewing list of MCP's on Chatgpt Desktop
+- confirm with running /mcp on Chatgpt CLI or viewing list of MCP's on Chatgpt Desktop
 
 
 # Deployment 
