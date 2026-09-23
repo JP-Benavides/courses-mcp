@@ -1,14 +1,10 @@
-import sys
 import unittest
 from itertools import combinations
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
 from toon_format import decode
-from tools.courses import course_codes, list_programs
+from src.tools.courses import course_codes, list_programs
 
 
 class CourseCodesTests(unittest.TestCase):
@@ -22,8 +18,9 @@ class CourseCodesTests(unittest.TestCase):
         query.execute.side_effect = [SimpleNamespace(data=page) for page in pages]
         return query
 
-    @patch("tools.courses.supabase")
-    def test_every_filter_combination(self, client):
+    @patch("src.tools.courses.get_supabase")
+    def test_every_filter_combination(self, get_client):
+        client = get_client.return_value
         values = {
             "program": "CSCI-UA",
             "program_name": "Computer Science",
@@ -41,8 +38,9 @@ class CourseCodesTests(unittest.TestCase):
                     for field, value in filters.items():
                         query.eq.assert_any_call(field, value)
 
-    @patch("tools.courses.supabase")
-    def test_pagination_deduplication_and_string_output(self, client):
+    @patch("src.tools.courses.get_supabase")
+    def test_pagination_deduplication_and_string_output(self, get_client):
+        client = get_client.return_value
         query = self.make_query(client, [
             [{"code": "B"}, {"code": "A"}],
             [{"code": "B"}, {"code": None}, {"code": " "}],
@@ -57,8 +55,9 @@ class CourseCodesTests(unittest.TestCase):
         )
         query.eq.assert_called_with("program", "CSCI-UA")
 
-    @patch("tools.courses.supabase")
-    def test_programs_are_preserved_and_sorted_in_toon(self, client):
+    @patch("src.tools.courses.get_supabase")
+    def test_programs_are_preserved_and_sorted_in_toon(self, get_client):
+        client = get_client.return_value
         first = {"program": "A", "program_name": "Alpha", "school": "School A"}
         last = {"program": "Z", "program_name": "Zeta", "school": "School Z"}
         self.make_query(client, [[last, first, last], []])
@@ -66,17 +65,20 @@ class CourseCodesTests(unittest.TestCase):
         self.assertIsInstance(result, str)
         self.assertEqual(decode(result), {"programs": [first, last]})
 
-    @patch("tools.courses.supabase")
-    def test_no_matches(self, client):
+    @patch("src.tools.courses.get_supabase")
+    def test_no_matches(self, get_client):
+        client = get_client.return_value
         self.make_query(client, [[]])
         self.assertEqual(decode(course_codes(school="Unknown")), {"course_codes": []})
 
-    @patch("tools.courses.supabase")
-    def test_missing_or_blank_filters_fail_before_query(self, client):
+    @patch("src.tools.courses.get_supabase")
+    def test_missing_or_blank_filters_fail_before_query(self, get_client):
+        client = get_client.return_value
         for filters in ({}, {"program": None}, {"school": " "},
                         {"program": "CSCI-UA", "program_name": ""}):
             with self.subTest(filters=filters), self.assertRaises(ValueError):
                 course_codes(**filters)
+        get_client.assert_not_called()
         client.table.assert_not_called()
 
 

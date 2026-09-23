@@ -1,6 +1,6 @@
 from fastmcp.tools import tool
 from toon_format import encode
-from src.db.connection import supabase
+from src.db.connection import get_supabase
 
 
 # List Programs
@@ -12,6 +12,7 @@ def list_programs() -> str:
     List Programs, Program_names, and schools for discovery
     Returns in TOON format
     """
+    supabase = get_supabase()
     programs = {}
     offset = 0
     page_size = 1000
@@ -75,6 +76,7 @@ def course_codes(
     if not filters:
         raise ValueError("Provide at least one of program, program_name, or school.")
 
+    supabase = get_supabase()
     codes = set()
     offset = 0
     page_size = 1000
@@ -113,6 +115,7 @@ def course_details(codes: list[str]) -> str:
     if any(not isinstance(code, str) or not code.strip() for code in codes):
         raise ValueError("Each course code must be a non-empty string.")
 
+    supabase = get_supabase()
     requested_codes = sorted({code.strip() for code in codes})
     courses = []
     offset = 0

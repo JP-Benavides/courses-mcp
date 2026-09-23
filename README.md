@@ -20,7 +20,10 @@ Direct execution with `python src/server.py` is also supported.
 - If running with stdio, change server.py to say `mcp.run()`
 or
 - If running with Streamable HTTP, change server.py to say `mcp.run(transport="http", host="127.0.0.1", port=8000)`
-- Then create ngrok tunnel to port `8000`
+
+- Each developer creates their own ngrok tunnel to their local server on port `8000` using `ngrok http 8000`.
+- Each developer is responsible for configuring authentication and access control before exposing their server. Owning the tunnel does not authenticate callers.
+
 - Add /mcp to the end of the ngrok URL, when adding the MCP to your LLM provider
 
 
@@ -43,4 +46,4 @@ example `./run_tests.sh -v` or `./run_tests.sh -k course_details`.
 
 
 # Deployment 
-- Plan is to deploy on Horizon
+- Plan is to deploy on Cloudflare
