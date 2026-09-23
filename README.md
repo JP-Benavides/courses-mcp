@@ -12,7 +12,10 @@ Easier than making an appointment with your advisor
 
 
 # Start MCP 
-`uv run src/server.py`
+`uv run courses-mcp`
+
+Starts Streamable HTTP at `http://127.0.0.1:8000/mcp`.
+Direct execution with `python src/server.py` is also supported.
 
 - If running with stdio, change server.py to say `mcp.run()`
 or

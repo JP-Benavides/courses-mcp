@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-courses-mcp = "src.server:mcp.run"
+courses-mcp = "src.server:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

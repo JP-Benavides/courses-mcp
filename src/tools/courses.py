@@ -1,6 +1,6 @@
 from fastmcp.tools import tool
 from toon_format import encode
-from db.connection import supabase
+from src.db.connection import supabase
 
 
 # List Programs
