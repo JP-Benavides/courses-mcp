@@ -76,12 +76,13 @@ def generate_bearer_token(
 
 # Create a bearer token using the existing private key.
 def main() -> None:
+    load_dotenv(PROJECT_ROOT / ".env")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("developer_id")
     parser.add_argument("--private-key", type=Path, default=PROJECT_ROOT / ".auth/private.pem")
     parser.add_argument("--hours", type=int, default=24)
-    parser.add_argument("--issuer", default=DEFAULT_ISSUER)
-    parser.add_argument("--audience", default=DEFAULT_AUDIENCE)
+    parser.add_argument("--issuer", default=os.environ.get("MCP_JWT_ISSUER", DEFAULT_ISSUER))
+    parser.add_argument("--audience", default=os.environ.get("MCP_JWT_AUDIENCE", DEFAULT_AUDIENCE))
     args = parser.parse_args()
     try:
         token = generate_bearer_token(
