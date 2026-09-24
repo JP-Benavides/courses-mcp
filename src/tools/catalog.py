@@ -104,26 +104,26 @@ def course_codes(
 # Get course details
 @tool(
     annotations={"readOnlyHint": True},
-    description="Return course codes and their metadata for one or more exact course codes. "
-    "Use course_codes to discover valid codes. Results are sorted by code in TOON format. "
-    "Unmatched codes are omitted.",
+    description="Retrieve or compare one or more courses, including program, school, metadata, and "
+    "prerequisites. Input codes ignore case and normalize whitespace. Metadata fields are aligned "
+    "with null for missing values. Unknown codes are listed in unmatched_codes. Returns sorted TOON.",
 )
 def course_details(codes: list[str]) -> str:
-    """Fetch metadata for any of the supplied codes and return sorted TOON."""
+    """Retrieve course details with consistent fields for single or multiple courses."""
     if not codes:
         raise ValueError("Provide at least one course code.")
     if any(not isinstance(code, str) or not code.strip() for code in codes):
         raise ValueError("Each course code must be a non-empty string.")
 
     supabase = get_supabase()
-    requested_codes = sorted({code.strip() for code in codes})
+    requested_codes = sorted({" ".join(code.upper().split()) for code in codes})
     courses = []
     offset = 0
     page_size = 1000
     while True:
         rows = (
             supabase.table("courses")
-            .select("code,metadata")
+            .select("code,program,program_name,school,metadata,prerequisites")
             .in_("code", requested_codes)
             .order("code")
             .range(offset, offset + page_size - 1)
@@ -137,7 +137,16 @@ def course_details(codes: list[str]) -> str:
         # Continue even when the server caps pages below the requested size.
         offset += len(rows)
 
-    return encode({"courses": sorted(courses, key=lambda row: row["code"])})
+    fields = sorted({key for row in courses if isinstance(row.get("metadata"), dict)
+                     for key in row["metadata"]})
+    results = []
+    for row in sorted(courses, key=lambda row: row["code"]):
+        metadata = row.get("metadata")
+        metadata = metadata if isinstance(metadata, dict) else {}
+        results.append({**row, "metadata": {key: metadata.get(key) for key in fields}})
+    found = {" ".join(row["code"].upper().split()) for row in courses}
+    return encode({"courses": results,
+                   "unmatched_codes": sorted(set(requested_codes) - found)})
 
 
 # Search courses
