@@ -38,10 +38,13 @@ uv run python -m src.middleware.auth.generate_bearer_token jp
 uv run python -m src.middleware.auth.generate_bearer_token jp --hours 720 
 ```
 
--Start Server
+**Start the server.**
+
 ```bash
-uv run python -m src.server
+uv run src/server.py
 ```
+
+Generate your bearer token and configure it in your MCP client separately.
 
 **4. Connect your MCP client.**
 
@@ -66,7 +69,32 @@ Anyone holding a token can use it until it expires. Individual tokens cannot
 currently be revoked; replacing the key pair and restarting the server
 invalidates all old tokens.
 
-# Local Testing 
+# Rate limiting
+
+The server uses FastMCP's token-bucket middleware, configured in
+`src/middleware/rate_limiter/rate_limiter.py`. Each authenticated developer can
+make a burst of 15 MCP requests, with capacity replenishing at 5 requests per
+second. New sessions or tokens for the same developer share the allowance.
+Tool calls and other MCP requests (including initialization and tool discovery)
+consume capacity; notifications do not.
+
+Optional `.env` settings override the defaults:
+
+```dotenv
+MCP_RATE_LIMIT_PER_SECOND=5
+MCP_RATE_LIMIT_BURST=15
+```
+
+Restart the server after changing these settings. Both must be positive; burst
+must be an integer. Excess requests receive an MCP rate-limit error (`-32000`),
+not an HTTP 429; clients should pause before retrying.
+
+Limits are in memory per server process and reset on restart. They are not
+shared across workers or replicas. HTTP authentication still rejects invalid
+tokens before this middleware; this is not an IP-based HTTP traffic limiter.
+Local calls without an authenticated token share one fallback allowance.
+
+# Local Testing
 
 Run all automated tests with `./run_tests.sh`. The script uses uv to install
 development dependencies and run pytest. Pass pytest options as needed, for
@@ -80,24 +108,32 @@ All tools are read-only and return TOON. Restart the server after adding tools.
 | --- | --- |
 | `list_programs()` | Discover valid program and school filters. |
 | `course_codes(program?, school?, program_name?)` | List codes using exact filters. |
-| `course_details(codes)` | Retrieve metadata for exact codes. |
+| `course_details(codes)` | Retrieve or compare courses with program, school, prerequisites, aligned metadata fields, and explicit unmatched codes. |
 | `search_courses(query, program?, school?, limit=20)` | Search codes, programs, schools, titles and descriptions; all query words must match, ignoring case. |
 | `program_overview(program, limit=20, offset=0)` | Get counts, schools, names and a page of course records. |
-| `compare_courses(codes)` | Compare up to 20 codes with consistent metadata fields and explicit missing codes. |
 | `find_similar_courses(code, limit=10)` | Rank related descriptions by word-frequency cosine similarity. |
-| `check_prerequisites(code, completed_codes)` | Show source evidence and which referenced codes appear in the supplied completion list. |
-| `courses_unlocked_by(code, limit=20)` | Find possible follow-on courses mentioning the code in requirement-related text. |
+| `check_prerequisites(code, completed_codes)` | Check the prerequisites column's required/alternative groups against completed courses. |
+| `courses_unlocked_by(code, limit=20)` | Find possible follow-on courses listing the code in the top-level `prerequisites` JSON groups' `courses` arrays. |
 
 New discovery tools accept limits from 1 to 100. Program and school filters are
-exact matches; course lookup in comparison, similarity and prerequisite tools
+exact matches; input codes in course details, similarity and prerequisite tools
 ignores case and normalizes whitespace. Missing metadata remains missing.
 Similarity does not establish course equivalence or transfer credit.
 
-Prerequisite tools return `unverified` eligibility and preserve source descriptions
-and any explicit prerequisite fields. Course references may be examples,
-alternatives, or corequisites. Grades, placement tests, permission and other
-conditions require source review; an empty result does not establish eligibility.
-`courses_unlocked_by` returns candidates rather than confirmed unlocks.
+Both prerequisite tools read the top-level `prerequisites` column, not metadata
+or description text. `check_prerequisites` requires every course in a `required`
+group and at least one in an `alternative` group; all groups must be satisfied.
+It returns per-group results and `course_requirements_met` (true, false, or null
+when unresolved). An empty array means no stored course prerequisites; missing,
+malformed, or unknown groups remain unresolved. `not_completed_references` can
+include unused alternatives and is not a list of missing requirements.
+Overall enrollment eligibility stays `unverified`; grades, permission, and other
+non-course conditions are not evaluated. Original prerequisite groups are preserved.
+`courses_unlocked_by` scans all catalog rows, matches complete codes in the
+`prerequisites` column (ignoring case and normalizing whitespace), and preserves
+the stored groups and their types. It returns candidates rather than confirmed
+unlocks: additional prerequisite groups may still need to be satisfied. The
+`total_candidates` count includes all matches; `limit` caps the returned list.
 
 Discovery currently reads catalog pages and processes them in Python without
 database migrations, embeddings or external AI services. Search and overview
@@ -120,7 +156,7 @@ The tool fetches the catalog and recomputes these vectors on every call;
 vectors are not currently cached or stored in the database.
 
 `search_courses` uses case-insensitive keyword matching, not vectorization or
-semantic search. The comparison, overview, and prerequisite tools do not use
+semantic search. The course details, overview, and prerequisite tools do not use
 vectorization either.
 
 Planned improvement (not implemented): generate semantic embeddings for course
