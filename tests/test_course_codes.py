@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from toon_format import decode
-from src.tools.courses import course_codes, list_programs
+from src.tools.catalog import course_codes, list_programs
 
 
 class CourseCodesTests(unittest.TestCase):
