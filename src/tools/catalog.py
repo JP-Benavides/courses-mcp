@@ -104,7 +104,7 @@ def course_codes(
 # Get course details
 @tool(
     annotations={"readOnlyHint": True},
-    description="Retrieve or compare one or more courses, including program, school, metadata, and "
+    description="Retrieve one or more courses, including program, school, metadata, and "
     "prerequisites. Input codes ignore case and normalize whitespace. Metadata fields are aligned "
     "with null for missing values. Unknown codes are listed in unmatched_codes. Returns sorted TOON.",
 )
