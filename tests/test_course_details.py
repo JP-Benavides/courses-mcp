@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from toon_format import decode
-from src.tools.courses import course_details
+from src.tools.catalog import course_details
 
 
 class CourseDetailsTests(unittest.TestCase):
