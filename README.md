@@ -33,7 +33,7 @@ openssl pkey -in .auth/private.pem -pubout -out .auth/public.pem #creates public
 uv run python -m src.middleware.auth.generate_bearer_token jp
 ```
 
--You can also run this instead, if you want to have a token with a specific amount of validity time (in hours).ok
+- You can also run this instead if you want a token with a specific validity period (in hours).
 ```bash
 uv run python -m src.middleware.auth.generate_bearer_token jp --hours 720 
 ```
