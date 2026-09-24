@@ -109,6 +109,7 @@ All tools are read-only and return TOON. Restart the server after adding tools.
 | `list_programs()` | Discover valid program and school filters. |
 | `course_codes(program?, school?, program_name?)` | List codes using exact filters. |
 | `course_details(codes)` | Retrieve or compare courses with program, school, prerequisites, aligned metadata fields, and explicit unmatched codes. |
+| `compare_courses(codes)` | Deprecated alias of `course_details(codes)` kept for backward compatibility. |
 | `search_courses(query, program?, school?, limit=20)` | Search codes, programs, schools, titles and descriptions; all query words must match, ignoring case. |
 | `program_overview(program, limit=20, offset=0)` | Get counts, schools, names and a page of course records. |
 | `find_similar_courses(code, limit=10)` | Rank related descriptions by word-frequency cosine similarity. |
@@ -117,7 +118,7 @@ All tools are read-only and return TOON. Restart the server after adding tools.
 
 New discovery tools accept limits from 1 to 100. Program and school filters are
 exact matches; input codes in course details, similarity and prerequisite tools
-ignores case and normalizes whitespace. Missing metadata remains missing.
+ignore case and normalize whitespace. Missing metadata remains missing.
 Similarity does not establish course equivalence or transfer credit.
 
 Both prerequisite tools read the top-level `prerequisites` column, not metadata

@@ -149,4 +149,12 @@ def course_details(codes: list[str]) -> str:
                    "unmatched_codes": sorted(set(requested_codes) - found)})
 
 
+@tool(
+    annotations={"readOnlyHint": True},
+    description="Deprecated alias for course_details; keeps compatibility for compare_courses clients.",
+)
+def compare_courses(codes: list[str]) -> str:
+    return course_details(codes)
+
+
 # Search courses
