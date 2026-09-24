@@ -77,6 +77,33 @@ def test_missing_key_stops_startup(tmp_path):
             create_server()
 
 
+def test_http_rate_limit_uses_verified_developer(keys, tmp_path, monkeypatch):
+    private, public = keys
+    key_path = tmp_path / "public.pem"
+    key_path.write_bytes(public)
+    monkeypatch.setenv("MCP_JWT_PUBLIC_KEY_FILE", str(key_path))
+    monkeypatch.setenv("MCP_JWT_ISSUER", "courses-mcp-local")
+    monkeypatch.setenv("MCP_JWT_AUDIENCE", "courses-mcp")
+    monkeypatch.setenv("MCP_RATE_LIMIT_PER_SECOND", "0.001")
+    monkeypatch.setenv("MCP_RATE_LIMIT_BURST", "1")
+    server = create_server()
+    with TestClient(server.http_app()) as client:
+        def initialize(developer):
+            return client.post("/mcp", headers={
+                "Authorization": f"Bearer {generate_bearer_token(developer, private)}",
+                "Accept": "application/json, text/event-stream",
+            }, json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                "protocolVersion": "2025-06-18", "capabilities": {},
+                "clientInfo": {"name": "test", "version": "1"},
+            }})
+
+        assert "serverInfo" in initialize("alice").text
+        rejected = initialize("alice")
+        assert "Rate limit exceeded" in rejected.text
+        assert "-32000" in rejected.text
+        assert "serverInfo" in initialize("bob").text
+
+
 @pytest.mark.parametrize("developer,hours", [(" ", 24), ("alice", 0), ("alice", -1)])
 def test_invalid_token_inputs(keys, developer, hours):
     with pytest.raises(ValueError):

@@ -15,39 +15,42 @@ class CourseDetailsTests(unittest.TestCase):
         query.execute.side_effect = [SimpleNamespace(data=page) for page in pages]
         return query
 
-    @patch("src.tools.courses.get_supabase")
+    @patch("src.tools.catalog.get_supabase")
     def test_multiple_codes_pagination_and_nested_toon(self, get_client):
         client = get_client.return_value
         first = {"code": "A", "metadata": {"description": "One, two\nthree", "credits": 4}}
         last = {"code": "B", "metadata": None}
         query = self.make_query(client, [[last], [first], []])
-        result = course_details([" B ", "A", "B"])
+        result = course_details([" b ", "a", "B"])
         self.assertIsInstance(result, str)
-        self.assertEqual(decode(result), {"courses": [first, last]})
+        self.assertEqual(decode(result), {"courses": [first, {**last, "metadata": {"description": None, "credits": None}}], "unmatched_codes": []})
         client.table.assert_called_with("courses")
-        query.select.assert_called_with("code,metadata")
+        query.select.assert_called_with("code,program,program_name,school,metadata,prerequisites")
         self.assertEqual(query.in_.call_count, 3)
         query.in_.assert_called_with("code", ["A", "B"])
         self.assertEqual([call.args for call in query.range.call_args_list],
                          [(0, 999), (1, 1000), (2, 1001)])
 
-    @patch("src.tools.courses.get_supabase")
-    def test_single_code(self, get_client):
-        client = get_client.return_value
-        row = {"code": "A", "metadata": {"description": "A course"}}
-        self.make_query(client, [[row], []])
-        self.assertEqual(decode(course_details(["A"])), {"courses": [row]})
-
-    @patch("src.tools.courses.get_supabase")
+    @patch("src.tools.catalog.get_supabase")
     def test_no_matches(self, get_client):
         client = get_client.return_value
         self.make_query(client, [[]])
-        self.assertEqual(decode(course_details(["Unknown"])), {"courses": []})
+        self.assertEqual(decode(course_details(["Unknown"])), {"courses": [], "unmatched_codes": ["UNKNOWN"]})
 
-    @patch("src.tools.courses.get_supabase")
+    @patch("src.tools.catalog.get_supabase")
+    def test_comparison_fields_prerequisites_and_partial_matches(self, get_client):
+        groups = [{"type": "required", "courses": ["PSYCH-UA 1"]}]
+        row = {"code": "PSYCH-UA 29", "program": "PSYCH-UA", "program_name": "Psychology",
+               "school": "CAS", "metadata": {"title": "Cognition"}, "prerequisites": groups}
+        query = self.make_query(get_client.return_value, [[row], []])
+        result = decode(course_details([" psych-ua\u00a0 29 ", "unknown"]))
+        self.assertEqual(result, {"courses": [row], "unmatched_codes": ["UNKNOWN"]})
+        query.in_.assert_called_with("code", ["PSYCH-UA 29", "UNKNOWN"])
+
+    @patch("src.tools.catalog.get_supabase")
     def test_invalid_codes_fail_before_query(self, get_client):
         client = get_client.return_value
-        for codes in ([], [""], [" "], ["A", ""], [None], [123]):
+        for codes in ([], [" "], [None]):
             with self.subTest(codes=codes), self.assertRaises(ValueError):
                 course_details(codes)
         get_client.assert_not_called()

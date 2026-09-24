@@ -18,7 +18,7 @@ class CourseCodesTests(unittest.TestCase):
         query.execute.side_effect = [SimpleNamespace(data=page) for page in pages]
         return query
 
-    @patch("src.tools.courses.get_supabase")
+    @patch("src.tools.catalog.get_supabase")
     def test_every_filter_combination(self, get_client):
         client = get_client.return_value
         values = {
@@ -38,7 +38,7 @@ class CourseCodesTests(unittest.TestCase):
                     for field, value in filters.items():
                         query.eq.assert_any_call(field, value)
 
-    @patch("src.tools.courses.get_supabase")
+    @patch("src.tools.catalog.get_supabase")
     def test_pagination_deduplication_and_string_output(self, get_client):
         client = get_client.return_value
         query = self.make_query(client, [
@@ -55,7 +55,7 @@ class CourseCodesTests(unittest.TestCase):
         )
         query.eq.assert_called_with("program", "CSCI-UA")
 
-    @patch("src.tools.courses.get_supabase")
+    @patch("src.tools.catalog.get_supabase")
     def test_programs_are_preserved_and_sorted_in_toon(self, get_client):
         client = get_client.return_value
         first = {"program": "A", "program_name": "Alpha", "school": "School A"}
@@ -65,13 +65,13 @@ class CourseCodesTests(unittest.TestCase):
         self.assertIsInstance(result, str)
         self.assertEqual(decode(result), {"programs": [first, last]})
 
-    @patch("src.tools.courses.get_supabase")
+    @patch("src.tools.catalog.get_supabase")
     def test_no_matches(self, get_client):
         client = get_client.return_value
         self.make_query(client, [[]])
         self.assertEqual(decode(course_codes(school="Unknown")), {"course_codes": []})
 
-    @patch("src.tools.courses.get_supabase")
+    @patch("src.tools.catalog.get_supabase")
     def test_missing_or_blank_filters_fail_before_query(self, get_client):
         client = get_client.return_value
         for filters in ({}, {"program": None}, {"school": " "},

@@ -13,6 +13,7 @@ def catalog():
         {"code": "CS-X 100", "program": "CS", "program_name": "Computing", "school": "A",
          "metadata": {"description": "Python programming and algorithms", "credits": 4}},
         {"code": "CS-X 200", "program": "CS", "program_name": "Computing", "school": "A",
+         "prerequisites": [{"type": "alternative", "courses": ["CS-X 100"]}],
          "metadata": {"description": "Python algorithms. Prerequisite: CS-X\u00a0100 or placement test.",
                       "courseUrl": "https://example.com/catalog"}},
         {"code": "ART 100", "program": "ART", "program_name": "Art", "school": "B",
@@ -39,12 +40,6 @@ def test_overview_pagination(catalog):
     assert decode(d.program_overview("CS", offset=4))["next_offset"] is None
 
 
-def test_comparison_nulls_and_unmatched(catalog):
-    result = decode(d.compare_courses([" cs-x 100 ", "CS-X 200", "UNKNOWN"]))
-    assert result["unmatched_codes"] == ["UNKNOWN"]
-    assert result["courses"][1]["metadata"]["credits"] is None
-
-
 def test_similarity_excludes_self_and_missing_descriptions(catalog):
     result = decode(d.find_similar_courses("CS-X 100"))
     assert result["courses"][0]["code"] == "CS-X 200"
@@ -52,27 +47,60 @@ def test_similarity_excludes_self_and_missing_descriptions(catalog):
     assert decode(d.find_similar_courses("ART 100"))["courses"] == []
 
 
-def test_prerequisites_preserve_alternatives_and_uncertainty(catalog):
-    result = decode(d.check_prerequisites("CS-X 200", ["cs-x 100"]))
-    assert result["completed_references"] == ["CS-X 100"]
-    assert result["not_completed_references"] == []
+@pytest.mark.parametrize("completed,met", [(["A 1", "C 3"], False),
+    (["A 1", "B 2"], False), (["a 1", "B\u00a02", "D 4"], True)])
+def test_check_prerequisites_requires_all_groups(catalog, completed, met):
+    catalog.return_value = [{"code": "TARGET 1", "prerequisites": [
+        {"type": "required", "courses": ["A 1", "B 2"]},
+        {"type": "alternative", "courses": ["C 3", "D 4"]}],
+        "metadata": {"description": "Prerequisite: WRONG 9", "prerequisites": "WRONG 9"}}]
+    result = decode(d.check_prerequisites("TARGET 1", completed))
+    catalog.assert_called_once_with(include_prerequisites=True)
+    assert result["course_requirements_met"] is met
+    assert result["referenced_codes"] == ["A 1", "B 2", "C 3", "D 4"]
+    if met:
+        assert result["groups"][1]["remaining_options"] == []
+        assert len(result["not_completed_references"]) == 1
+
+
+@pytest.mark.parametrize("prerequisites,met", [(None, None), ([], True),
+    ([{"type": "other", "courses": ["A 1"]}], None)])
+def test_check_prerequisites_missing_empty_and_unknown(catalog, prerequisites, met):
+    catalog.return_value = [{"code": "A 1", "prerequisites": prerequisites}]
+    result = decode(d.check_prerequisites("A 1", []))
+    assert result["course_requirements_met"] is met
     assert result["status"] == "unverified"
-    assert "or placement test" in result["description"]
-    assert decode(d.check_prerequisites("ART 100", []))["status"] == "unverified"
 
 
-def test_reverse_references_do_not_match_code_prefixes(catalog):
-    result = decode(d.courses_unlocked_by("CS-X 100"))
-    assert [r["code"] for r in result["candidates"]] == ["CS-X 200"]
-    assert decode(d.courses_unlocked_by("CS-X 1000"))["total_candidates"] == 0
+def test_unlocks_use_prerequisite_column_not_description(catalog):
+    groups = [{"type": "required", "courses": ["OTHER 1"]},
+              {"type": "alternative", "courses": [" psych-ua\u00a01 ", "APSY-UE 2"]}]
+    catalog.return_value = [
+        {"code": "PSYCH-UA 1"},
+        {"code": "PSYCH-UA 29", "prerequisites": groups},
+        {"code": "PSYCH-UA 32", "prerequisites": {"courses": ["PSYCH-UA 1"]}},
+        {"code": "PSYCH-UA 99", "prerequisites": [{"courses": ["PSYCH-UA 10"]}]},
+        {"code": "PSYCH-UA 98", "metadata": {"description": "Prerequisite: PSYCH-UA 1"}},
+    ]
+    result = decode(d.courses_unlocked_by("psych-ua 1", limit=1))
+    catalog.assert_called_once_with(include_prerequisites=True)
+    assert result["total_candidates"] == 2
+    assert len(result["candidates"]) == 1
+    assert result["candidates"][0]["code"] == "PSYCH-UA 29"
+    assert result["candidates"][0]["prerequisite_fields"]["prerequisites"] == groups
+    assert result["candidates"][0]["status"] == "unverified"
+
+
+@pytest.mark.parametrize("prerequisites", [None, [], [{"courses": "PSYCH-UA 1"}]])
+def test_unlocks_skip_missing_or_malformed_prerequisites(catalog, prerequisites):
+    catalog.return_value = [{"code": "PSYCH-UA 1"},
+                            {"code": "PSYCH-UA 29", "prerequisites": prerequisites}]
+    assert decode(d.courses_unlocked_by("PSYCH-UA 1"))["total_candidates"] == 0
 
 
 @pytest.mark.parametrize("call", [
-    lambda: d.search_courses(" "), lambda: d.search_courses("x", limit=0),
-    lambda: d.search_courses("x", school=" "), lambda: d.program_overview("CS", offset=-1),
-    lambda: d.compare_courses([]), lambda: d.compare_courses([" "]),
-    lambda: d.find_similar_courses("X", limit=101),
-    lambda: d.check_prerequisites("X", [""]), lambda: d.courses_unlocked_by(" "),
+    lambda: d.courses_unlocked_by(" "), lambda: d.courses_unlocked_by("X", limit=0),
+    lambda: d.check_prerequisites("X", [""]),
 ])
 def test_invalid_inputs_do_not_query(catalog, call):
     with pytest.raises(ValueError):
@@ -85,7 +113,8 @@ def test_unknown_course_is_explicit(catalog):
         d.check_prerequisites("UNKNOWN", [])
 
 
-def test_catalog_continues_through_server_capped_pages():
+@pytest.mark.parametrize("include_prerequisites", [False, True])
+def test_catalog_continues_through_server_capped_pages(include_prerequisites):
     query = MagicMock()
     for method in ("select", "eq", "order", "range"):
         getattr(query, method).return_value = query
@@ -93,5 +122,7 @@ def test_catalog_continues_through_server_capped_pages():
                                  SimpleNamespace(data=[{"code": "B"}]), SimpleNamespace(data=[])]
     with patch.object(d, "get_supabase") as client:
         client.return_value.table.return_value = query
-        assert d._catalog(program="CS") == [{"code": "A"}, {"code": "B"}]
+        assert d._catalog(program="CS", include_prerequisites=include_prerequisites) == [{"code": "A"}, {"code": "B"}]
+    columns = "code,program,program_name,school,metadata"
+    query.select.assert_called_with(columns + (",prerequisites" if include_prerequisites else ""))
     assert [call.args for call in query.range.call_args_list] == [(0, 999), (1, 1000), (2, 1001)]

@@ -21,11 +21,14 @@ def _limit(limit: int) -> None:
         raise ValueError("limit must be an integer between 1 and 100.")
 
 
-def _catalog(**filters) -> list[dict]:
+def _catalog(*, include_prerequisites: bool = False, **filters) -> list[dict]:
     client = get_supabase()
     rows = []
+    columns = "code,program,program_name,school,metadata"
+    if include_prerequisites:
+        columns += ",prerequisites"
     while True:
-        query = client.table("courses").select("code,program,program_name,school,metadata")
+        query = client.table("courses").select(columns)
         for field, value in filters.items():
             query = query.eq(field, value)
         page = query.order("code").range(len(rows), len(rows) + 999).execute().data
@@ -64,29 +67,6 @@ def _search_text(row: dict) -> str:
     return " ".join(value for value in values if isinstance(value, str))
 
 
-def _evidence(row: dict, rows: list[dict]) -> dict:
-    meta = _metadata(row)
-    explicit = {key: meta[key] for key in ("prerequisites", "prerequisite", "corequisites")
-                if key in meta}
-    description = meta.get("description")
-    description = description if isinstance(description, str) else ""
-    # Include full source text: sentence splitting can lose alternatives or conditions.
-    source = " ".join([description, *(str(value) for value in explicit.values())])
-    normalized = _normalize(source)
-    mentions = sorted({other["code"] for other in rows if other.get("code")
-                       and _normalize(other["code"]) != _normalize(row["code"])
-                       and re.search(r"(?<![\w-])" + re.escape(_normalize(other["code"]))
-                                     + r"(?![\w-])", normalized)})
-    return {"status": "unverified", "prerequisite_fields": explicit,
-            "description": description, "course_url": meta.get("courseUrl"),
-            "referenced_codes": mentions,
-            "has_requirement_language": bool(explicit) or bool(re.search(
-                r"prerequisite|co-?requisite|placement|permission|consent", source, re.I)),
-            "note": "Course references are not necessarily prerequisites. Review the source for "
-                    "alternatives, grades, placement, permission, and other conditions. "
-                    "Missing prerequisite data does not establish eligibility."}
-
-
 @tool(annotations={"readOnlyHint": True}, description="Search catalog codes, program names, "
       "schools, titles and descriptions by case-insensitive words. All query words must match. "
       "Optional program and school filters match exactly. Returns ranked TOON results.")
@@ -122,19 +102,6 @@ def program_overview(program: str, limit: int = 20, offset: int = 0) -> str:
                    "next_offset": offset + limit if offset + limit < len(rows) else None})
 
 
-@tool(annotations={"readOnlyHint": True}, description="Compare available metadata for up to 20 "
-      "course codes using consistent fields. Missing values are null; unmatched codes are explicit. Returns TOON.")
-def compare_courses(codes: list[str]) -> str:
-    if not 1 <= len(codes) <= 20:
-        raise ValueError("Provide between 1 and 20 course codes.")
-    requested = {_normalize(_text(code, "code")) for code in codes}
-    rows = [row for row in _catalog() if _normalize(row.get("code") or "") in requested]
-    fields = sorted({key for row in rows for key in _metadata(row)})
-    return encode({"courses": [{**row, "metadata": {key: _metadata(row).get(key) for key in fields}}
-                                for row in rows],
-                   "unmatched_codes": sorted(requested - {_normalize(row["code"]) for row in rows})})
-
-
 @tool(annotations={"readOnlyHint": True}, description="Find courses with similar descriptions "
       "using word-frequency cosine similarity. Scores indicate text overlap, not equivalency or credit transfer. Returns TOON.")
 def find_similar_courses(code: str, limit: int = 10) -> str:
@@ -162,32 +129,83 @@ def find_similar_courses(code: str, limit: int = 10) -> str:
 
 @tool(annotations={"readOnlyHint": True}, description="Retrieve prerequisite evidence and mark "
       "which referenced courses are in the supplied completed list. Eligibility stays unverified: "
-      "prose may include alternatives and non-course conditions. Returns TOON.")
+      "Checks required (all) and alternative (any) groups in the prerequisites column. Returns TOON.")
 def check_prerequisites(code: str, completed_codes: list[str]) -> str:
     code = _text(code, "code")
     completed = {_normalize(_text(value, "completed_code")) for value in completed_codes}
-    rows = _catalog()
+    rows = _catalog(include_prerequisites=True)
     row = _find(rows, code)
-    evidence = _evidence(row, rows)
-    return encode({"code": row["code"], **evidence,
-                   "completed_references": [c for c in evidence["referenced_codes"] if _normalize(c) in completed],
-                   "not_completed_references": [c for c in evidence["referenced_codes"] if _normalize(c) not in completed]})
+    prerequisites = row.get("prerequisites")
+    groups = [prerequisites] if isinstance(prerequisites, dict) else prerequisites
+    results = []
+    references = set()
+    for group in groups if isinstance(groups, list) else []:
+        courses = group.get("courses") if isinstance(group, dict) else None
+        kind = group.get("type") if isinstance(group, dict) else None
+        valid = (isinstance(courses, list) and bool(courses)
+                 and all(isinstance(c, str) and c.strip() for c in courses))
+        codes = sorted({_normalize(c) for c in courses
+                        if isinstance(c, str) and c.strip()}) if isinstance(courses, list) else []
+        references.update(codes)
+        matched = [c for c in codes if c in completed]
+        outstanding = [c for c in codes if c not in completed]
+        satisfied = None
+        if valid and kind == "required":
+            satisfied = not outstanding
+        elif valid and kind == "alternative":
+            satisfied = bool(matched)
+        results.append({"type": kind, "courses": codes, "satisfied": satisfied,
+                        "completed_courses": matched,
+                        "remaining_options": outstanding if satisfied is False else []})
+    states = [group["satisfied"] for group in results]
+    requirements_met = (False if False in states else
+                        None if not isinstance(groups, list) or None in states else True)
+    meta = _metadata(row)
+    return encode({
+        "code": row["code"], "status": "unverified",
+        "prerequisite_fields": {"prerequisites": prerequisites},
+        "description": meta.get("description"), "course_url": meta.get("courseUrl"),
+        "referenced_codes": sorted(references),
+        "completed_references": sorted(references & completed),
+        "not_completed_references": sorted(references - completed),
+        "groups": results, "course_requirements_met": requirements_met,
+        "note": "Assessment uses only the stored prerequisite groups and supplied completions. "
+                "All groups must be satisfied: required needs every course; alternative needs one. "
+                "An empty list means no stored course prerequisites; missing or unsupported data is unverified. "
+                "Not-completed references may be unused alternatives, not missing requirements. "
+                "Enrollment eligibility and non-course conditions are not verified.",
+    })
 
 
 @tool(annotations={"readOnlyHint": True}, description="Find possible follow-on courses whose "
-      "requirement-related descriptions or fields mention a course. These are candidates, not "
+      "prerequisites column contains the code in a JSON group's courses list. These are candidates, not "
       "confirmed unlocks; source evidence and eligibility limitations are returned in TOON.")
 def courses_unlocked_by(code: str, limit: int = 20) -> str:
     code = _text(code, "code")
     _limit(limit)
-    rows = _catalog()
+    rows = _catalog(include_prerequisites=True)
     source = _find(rows, code)
+    normalized_code = _normalize(source["code"])
     candidates = []
     for row in rows:
         if row["code"] == source["code"]:
             continue
-        evidence = _evidence(row, [source])
-        if evidence["referenced_codes"] and evidence["has_requirement_language"]:
-            candidates.append({"code": row["code"], **evidence})
+        prerequisites = row.get("prerequisites")
+        groups = [prerequisites] if isinstance(prerequisites, dict) else prerequisites
+        if not isinstance(groups, list):
+            continue
+        if any(isinstance(group, dict) and isinstance(group.get("courses"), list)
+               and any(isinstance(reference, str) and _normalize(reference) == normalized_code
+                       for reference in group["courses"])
+               for group in groups):
+            meta = _metadata(row)
+            candidates.append({
+                "code": row["code"], "status": "unverified",
+                "prerequisite_fields": {"prerequisites": prerequisites},
+                "referenced_codes": [source["code"]],
+                "description": meta.get("description"), "course_url": meta.get("courseUrl"),
+                "note": "This course lists the supplied code in its prerequisites. "
+                        "Review all prerequisite groups and their types for additional requirements or alternatives.",
+            })
     return encode({"code": source["code"], "total_candidates": len(candidates),
                    "candidates": candidates[:limit]})
