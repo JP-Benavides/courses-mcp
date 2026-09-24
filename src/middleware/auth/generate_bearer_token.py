@@ -12,6 +12,8 @@ from fastmcp import FastMCP
 from fastmcp.server.auth.providers.jwt import JWTVerifier
 from fastmcp.server.providers import FileSystemProvider
 
+from src.middleware.rate_limiter.rate_limiter import create_rate_limiter
+
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_ISSUER = "courses-mcp-local"
 DEFAULT_AUDIENCE = "courses-mcp"
@@ -37,6 +39,7 @@ def create_server() -> FastMCP:
     )
     return FastMCP(
         "AdvisorMCP", auth=auth,
+        middleware=[create_rate_limiter()],
         providers=[FileSystemProvider(project_root / "src" / "tools")],
     )
 

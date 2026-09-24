@@ -15,7 +15,7 @@ class CourseDetailsTests(unittest.TestCase):
         query.execute.side_effect = [SimpleNamespace(data=page) for page in pages]
         return query
 
-    @patch("src.tools.courses.get_supabase")
+    @patch("src.tools.catalog.get_supabase")
     def test_multiple_codes_pagination_and_nested_toon(self, get_client):
         client = get_client.return_value
         first = {"code": "A", "metadata": {"description": "One, two\nthree", "credits": 4}}
@@ -31,20 +31,20 @@ class CourseDetailsTests(unittest.TestCase):
         self.assertEqual([call.args for call in query.range.call_args_list],
                          [(0, 999), (1, 1000), (2, 1001)])
 
-    @patch("src.tools.courses.get_supabase")
+    @patch("src.tools.catalog.get_supabase")
     def test_single_code(self, get_client):
         client = get_client.return_value
         row = {"code": "A", "metadata": {"description": "A course"}}
         self.make_query(client, [[row], []])
         self.assertEqual(decode(course_details(["A"])), {"courses": [row]})
 
-    @patch("src.tools.courses.get_supabase")
+    @patch("src.tools.catalog.get_supabase")
     def test_no_matches(self, get_client):
         client = get_client.return_value
         self.make_query(client, [[]])
         self.assertEqual(decode(course_details(["Unknown"])), {"courses": []})
 
-    @patch("src.tools.courses.get_supabase")
+    @patch("src.tools.catalog.get_supabase")
     def test_invalid_codes_fail_before_query(self, get_client):
         client = get_client.return_value
         for codes in ([], [""], [" "], ["A", ""], [None], [123]):
