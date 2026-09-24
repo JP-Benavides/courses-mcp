@@ -117,7 +117,7 @@ All tools are read-only and return TOON. Restart the server after adding tools.
 
 New discovery tools accept limits from 1 to 100. Program and school filters are
 exact matches; input codes in course details, similarity and prerequisite tools
-ignores case and normalizes whitespace. Missing metadata remains missing.
+ignore case and normalize whitespace. Missing metadata remains missing.
 Similarity does not establish course equivalence or transfer credit.
 
 Both prerequisite tools read the top-level `prerequisites` column, not metadata
