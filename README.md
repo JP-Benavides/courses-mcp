@@ -102,6 +102,35 @@ its grant and refresh token remain valid; access tokens themselves expire.
 The old `generate_bearer_token.py` remains a local utility only; its output is
 not accepted by this OAuth server. No private signing key is needed here.
 
+## Docker (local container)
+
+The image uses Python 3.13 and uv 0.12.21, installs locked dependencies without
+development tools, and starts the server as a nonroot user. Dependencies are
+installed during the build; startup runs the virtual environment's Python directly.
+
+1. Start Docker and prepare your `.env` using the OAuth settings above. Docker
+   reads it with `--env-file`; use `KEY=value` entries without shell expansion.
+2. Build the image from the project root:
+
+   ```bash
+   docker build -t courses-mcp:local .
+   ```
+
+3. Start the container:
+
+   ```bash
+   docker run --rm --name courses-mcp --env-file .env -e HOST=0.0.0.0 -e PORT=8080 -p 127.0.0.1:8000:8080 courses-mcp:local
+   ```
+
+The server listens on port 8080 inside the container, mapped to
+`http://127.0.0.1:8000/mcp` on your computer. Keep your HTTPS tunnel forwarding
+to local port 8000 and configure `MCP_PUBLIC_URL` as described above. OAuth is
+still required. Press Ctrl+C to stop and remove the container.
+
+Local `.env`, `.auth`, `.git`, and virtual environments are excluded from the
+build. Outside Docker, `HOST` and `PORT` default to `127.0.0.1` and `8000`.
+This prepares a container for eventual Cloud Run work; it does not deploy it.
+
 ## Logout, disconnect, and database access
 
 Website logout ends only the current website session (`scope: "local"`).

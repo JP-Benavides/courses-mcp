@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import sys
 
 # Support the package import when this file is launched directly.
@@ -28,7 +29,12 @@ def create_server() -> FastMCP:
 
 
 def main():
-    create_server().run(transport="http", host="127.0.0.1", port=8000)
+    server = create_server()
+    server.run(
+        transport="http",
+        host=os.environ.get("HOST", "127.0.0.1"),
+        port=int(os.environ.get("PORT", "8000")),
+    )
 
 if __name__ == "__main__":
     main()
