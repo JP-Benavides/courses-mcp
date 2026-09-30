@@ -5,6 +5,7 @@ import re
 from collections import Counter
 
 from fastmcp.tools import tool
+from src.middleware.auth.provider import TOOL_AUTH_META
 from toon_format import encode
 
 from src.db.connection import get_supabase
@@ -22,19 +23,19 @@ def _limit(limit: int) -> None:
 
 
 def _catalog(*, include_prerequisites: bool = False, **filters) -> list[dict]:
-    client = get_supabase()
-    rows = []
-    columns = "code,program,program_name,school,metadata"
-    if include_prerequisites:
-        columns += ",prerequisites"
-    while True:
-        query = client.table("courses").select(columns)
-        for field, value in filters.items():
-            query = query.eq(field, value)
-        page = query.order("code").range(len(rows), len(rows) + 999).execute().data
-        if not page:
-            return rows
-        rows.extend(page)
+    with get_supabase() as client:
+        rows = []
+        columns = "code,program,program_name,school,metadata"
+        if include_prerequisites:
+            columns += ",prerequisites"
+        while True:
+            query = client.table("courses").select(columns)
+            for field, value in filters.items():
+                query = query.eq(field, value)
+            page = query.order("code").range(len(rows), len(rows) + 999).execute().data
+            if not page:
+                return rows
+            rows.extend(page)
 
 
 def _metadata(row: dict) -> dict:
@@ -67,7 +68,7 @@ def _search_text(row: dict) -> str:
     return " ".join(value for value in values if isinstance(value, str))
 
 
-@tool(annotations={"readOnlyHint": True}, description="Search catalog codes, program names, "
+@tool(meta=TOOL_AUTH_META, annotations={"readOnlyHint": True}, description="Search catalog codes, program names, "
       "schools, titles and descriptions by case-insensitive words. All query words must match. "
       "Optional program and school filters match exactly. Returns ranked TOON results.")
 def search_courses(query: str, program: str | None = None,
@@ -87,7 +88,7 @@ def search_courses(query: str, program: str | None = None,
     return encode({"total_matches": len(matches), "courses": [row for _, row in matches[:limit]]})
 
 
-@tool(annotations={"readOnlyHint": True}, description="Get a program's course count, schools, "
+@tool(meta=TOOL_AUTH_META, annotations={"readOnlyHint": True}, description="Get a program's course count, schools, "
       "names and paginated course summaries. Program matches exactly. Returns TOON.")
 def program_overview(program: str, limit: int = 20, offset: int = 0) -> str:
     program = _text(program, "program")
@@ -102,7 +103,7 @@ def program_overview(program: str, limit: int = 20, offset: int = 0) -> str:
                    "next_offset": offset + limit if offset + limit < len(rows) else None})
 
 
-@tool(annotations={"readOnlyHint": True}, description="Find courses with similar descriptions "
+@tool(meta=TOOL_AUTH_META, annotations={"readOnlyHint": True}, description="Find courses with similar descriptions "
       "using word-frequency cosine similarity. Scores indicate text overlap, not equivalency or credit transfer. Returns TOON.")
 def find_similar_courses(code: str, limit: int = 10) -> str:
     code = _text(code, "code")
@@ -127,7 +128,7 @@ def find_similar_courses(code: str, limit: int = 10) -> str:
                    "courses": matches[:limit]})
 
 
-@tool(annotations={"readOnlyHint": True}, description="Retrieve prerequisite evidence and mark "
+@tool(meta=TOOL_AUTH_META, annotations={"readOnlyHint": True}, description="Retrieve prerequisite evidence and mark "
       "which referenced courses are in the supplied completed list. Eligibility stays unverified: "
       "Checks required (all) and alternative (any) groups in the prerequisites column. Returns TOON.")
 def check_prerequisites(code: str, completed_codes: list[str]) -> str:
@@ -177,7 +178,7 @@ def check_prerequisites(code: str, completed_codes: list[str]) -> str:
     })
 
 
-@tool(annotations={"readOnlyHint": True}, description="Find possible follow-on courses whose "
+@tool(meta=TOOL_AUTH_META, annotations={"readOnlyHint": True}, description="Find possible follow-on courses whose "
       "prerequisites column contains the code in a JSON group's courses list. These are candidates, not "
       "confirmed unlocks; source evidence and eligibility limitations are returned in TOON.")
 def courses_unlocked_by(code: str, limit: int = 20) -> str:

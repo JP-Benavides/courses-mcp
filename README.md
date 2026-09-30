@@ -11,70 +11,127 @@ Easier than making an appointment with your advisor
 - Hosting - Cloudflare 
 
 
-# Start Local MCP
+# OAuth setup for MCP clients
 
-You need `uv` and OpenSSL installed. Run these commands from the project folder.
+Supabase Auth handles accounts, login, consent, authorization codes, and refresh
+tokens for MCP clients. This server is the protected resource.
+Users must have a non-anonymous Supabase account before authorizing access.
+The companion frontend is `../courses-website`.
 
-**1. Set up your environment.** Copy `.env.example` to `.env` if you don't already
-have one, then fill in `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`.
+## Configure Supabase and MCP clients
 
-**2. Create auth keys once.** Skip this if `.auth/private.pem` and `.auth/public.pem` already exist.
+1. Enable **Authentication → OAuth Server** in the same Supabase project as the
+   website. Set the website's deployed HTTPS Site URL and authorization path
+   `/oauth/consent`. Configure the website's existing login/confirmation redirect
+   URLs as well, including `/auth/callback` with the return path used to resume
+   consent after signup confirmation or Google login. Set the website's existing
+   `NEXT_PUBLIC_MCP_URL` to the canonical HTTPS MCP endpoint ending in `/mcp`.
+   See [Supabase setup](https://supabase.com/docs/guides/auth/oauth-server/getting-started).
+2. Use an asymmetric Supabase signing key, **ES256** or **RS256**. Match the
+   algorithm in the MCP environment. Legacy HS256 project secrets are not used.
+3. Enable **dynamic client registration** under Authentication → OAuth Server.
+   Compatible desktop and other MCP clients can register with Supabase using
+   their callback URL and PKCE. Require explicit user approval on the website's
+   consent screen. A manually registered OAuth client also works.
+4. Install and enable the audience hook after configuring its resource placeholder.
+   Then connect an MCP client to the canonical HTTPS MCP URL, ending in `/mcp`.
+
+[Supabase's MCP authentication guide](https://supabase.com/docs/guides/auth/oauth-server/mcp-authentication)
+covers registration, consent, and PKCE. Supabase publishes authorization-server metadata; FastMCP publishes
+protected-resource metadata and an unauthenticated `401` discovery challenge.
+
+## Bind access tokens to this MCP
+
+Default Supabase access tokens have `aud: "authenticated"`; this server rejects
+that audience alone. The required resource is exactly `MCP_PUBLIC_URL + "/mcp"`.
+Use [supabase/mcp_access_token_hook.sql](supabase/mcp_access_token_hook.sql) as a
+reviewable installation template, **not an automatically applied migration**:
+For the current ngrok origin, a ready-to-review copy is
+[supabase/mcp_access_token_hook.ngrok.sql](supabase/mcp_access_token_hook.ngrok.sql).
+
+1. Replace its resource URL placeholder. The resource URL must
+   match the MCP public URL, including `/mcp` and excluding a trailing slash.
+2. If the project already has a Custom Access Token hook, merge this logic into
+   that hook; do not discard existing claims or hook behavior.
+3. Run the reviewed SQL in the Supabase SQL editor, then select
+   `public.courses_mcp_access_token_hook` under **Authentication → Hooks → Custom
+   Access Token**. The template aborts installation with unresolved placeholders.
+4. Verify both initial OAuth issuance and refresh issuance. An authenticated,
+   non-anonymous OAuth user's token should contain
+   `aud: ["authenticated", "https://your-host/mcp"]` for any Supabase-issued
+   OAuth client ID. Ordinary website sessions retain their original audience.
+   Do not copy tokens into logs or public JWT debugging websites.
+
+The hook changes the audience for authenticated, non-anonymous OAuth tokens with
+a provider-issued client ID and preserves the remaining claims. It does not accept a client-supplied arbitrary
+resource or user metadata as authority. Supabase documents
+[client-specific audience customization](https://supabase.com/docs/guides/auth/oauth-server/token-security).
+The two audiences intentionally allow the MCP and the project's database API to
+consume this token: [PostgREST supports audience arrays](https://postgrest.org/en/stable/references/auth.html#jwt-claims-validation).
+**Hook acceptance, refreshed tokens, and database API compatibility still need
+verification against the deployed Supabase project.** Do not relax MCP audience
+validation if project configuration rejects this setup.
+
+The verifier checks the project issuer, JWKS signature, configured algorithm,
+expiration, resource audience, UUID user subject, `role: authenticated`,
+`is_anonymous: false`, and a nonempty provider-issued OAuth client ID. Ordinary website tokens,
+anonymous accounts, ID tokens, and legacy locally signed tokens cannot authorize
+MCP requests. Tool metadata requests `openid offline_access`. This project's
+Supabase metadata advertises both scopes; `offline_access` requests ongoing
+refresh access, though live issuance with that scope still needs verification.
+OAuth scopes do not grant database permissions;
+there is no custom `courses:read` scope in this integration.
+
+## Start the server
+
+Install `uv`, copy `.env.example` to `.env` if needed, and populate its settings.
+Keep the website and server on the same Supabase project. `MCP_PUBLIC_URL` must
+be an HTTPS **origin**, without `/mcp`, a query, or credentials. For local testing,
+use the HTTPS origin of a tunnel forwarding to port 8000; update the hook when
+that public resource URL changes.
 
 ```bash
-mkdir -p .auth
-chmod 700 .auth
-(umask 077; openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out .auth/private.pem) #creates private key 
-openssl pkey -in .auth/private.pem -pubout -out .auth/public.pem #creates public key 
+uv sync
+uv run python -m src.server
 ```
 
-**3. Generate your token and start the server.** Replace `jp` with your name.
+The server listens on `127.0.0.1:8000`; expose it through your HTTPS proxy/tunnel.
+MCP clients connect to `https://your-host/mcp` and manage their access and refresh
+tokens. A desktop client's saved connection can renew access across restarts while
+its grant and refresh token remain valid; access tokens themselves expire.
+The old `generate_bearer_token.py` remains a local utility only; its output is
+not accepted by this OAuth server. No private signing key is needed here.
 
-```bash
-uv run python -m src.middleware.auth.generate_bearer_token jp
-```
+## Logout, disconnect, and database access
 
-- You can also run this instead if you want a token with a specific validity period (in hours).
-```bash
-uv run python -m src.middleware.auth.generate_bearer_token jp --hours 720 
-```
+Website logout ends only the current website session (`scope: "local"`).
+It does not disconnect ChatGPT. The website's connected-app controls revoke the
+chosen Supabase OAuth grant separately, preventing further renewal. This server
+validates JWTs locally; a previously issued access token may remain usable until
+its expiration. Configure a suitable access-token lifetime in Supabase.
 
-**Start the server.**
+Database queries use a separate client per request with the verified user's
+access token and the publishable key. No service-role key or global user session
+is used. This supplies the identity that future RLS policies can inspect; it
+**does not create row isolation by itself**. RLS policies are not installed by
+this change. The owner will configure them and test cross-user isolation later.
+OIDC scopes are not a substitute for those policies.
 
-```bash
-uv run src/server.py
-```
+## Integration checks still required
 
-Generate your bearer token and configure it in your MCP client separately.
-
-**4. Connect your MCP client.**
-
-- URL: `http://127.0.0.1:8000/mcp`
-- Authorization header: `Bearer <paste your token here>`
-
-Tokens last 24 hours. Run the token command again when yours expires.
-Keep tokens and `.auth/private.pem` private.
-
-For remote access, run `ngrok http 8000` and use `https://<your-tunnel-host>/mcp`
-with the same token.
-
-### How auth works
-
-The private key signs a token containing your name, expiration time, and
-`courses:read` permission. Your client sends that token with each request.
-The server uses the public key to check the signature, expiration, expected
-issuer and audience, and permission before allowing access.
-
-This is manual token authentication: there is no login page or OAuth flow.
-Anyone holding a token can use it until it expires. Individual tokens cannot
-currently be revoked; replacing the key pair and restarting the server
-invalidates all old tokens.
+Automated local tests do not prove the live provider/ChatGPT connection. After
+configuring the project, check account signup/login, approve and deny, OAuth
+code exchange with the resource parameter, token audience/signature, database
+queries, refresh, website logout preserving ChatGPT access, and grant revocation
+preventing renewal. After RLS is configured, test allowed reads and cross-user
+isolation using two real accounts. No live OAuth or RLS verification is claimed.
 
 # Rate limiting
 
 The server uses FastMCP's token-bucket middleware, configured in
-`src/middleware/rate_limiter/rate_limiter.py`. Each authenticated developer can
+`src/middleware/rate_limiter/rate_limiter.py`. Each authenticated user can
 make a burst of 15 MCP requests, with capacity replenishing at 5 requests per
-second. New sessions or tokens for the same developer share the allowance.
+second. New sessions or tokens for the same user share the allowance.
 Tool calls and other MCP requests (including initialization and tool discovery)
 consume capacity; notifications do not.
 

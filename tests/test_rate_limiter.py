@@ -12,7 +12,14 @@ MODULE = "src.middleware.rate_limiter.rate_limiter"
 CLOCK = "fastmcp.server.middleware.rate_limiting.time.time"
 
 
-def test_burst_refill_and_developer_isolation(monkeypatch):
+def identity(user, token="token"):
+    return SimpleNamespace(client_id="chatgpt", token=token, claims={
+        "iss": "https://example.supabase.co/auth/v1",
+        "sub": "11111111-1111-4111-8111-111111111111" if user == "alice" else "22222222-2222-4222-8222-222222222222",
+    })
+
+
+def test_burst_refill_and_user_isolation(monkeypatch):
     monkeypatch.setenv("MCP_RATE_LIMIT_PER_SECOND", "1")
     monkeypatch.setenv("MCP_RATE_LIMIT_BURST", "2")
 
@@ -21,17 +28,17 @@ def test_burst_refill_and_developer_isolation(monkeypatch):
         context = MiddlewareContext(message=None, method="tools/call")
         next_call = AsyncMock(return_value="ok")
         with patch(CLOCK, return_value=100) as clock, patch(MODULE + ".get_access_token") as token:
-            token.return_value = SimpleNamespace(client_id="alice", token="first")
+            token.return_value = identity("alice", "first")
             assert await limiter.on_request(context, next_call) == "ok"
             await limiter.on_request(context, next_call)
-            # A replacement token must not reset the developer's allowance.
-            token.return_value = SimpleNamespace(client_id="alice", token="replacement")
+            # A replacement token must not reset the user's allowance.
+            token.return_value = identity("alice", "replacement")
             with pytest.raises(RateLimitError):
                 await limiter.on_request(context, next_call)
             assert next_call.await_count == 2
-            token.return_value = SimpleNamespace(client_id="bob")
+            token.return_value = identity("bob")
             await limiter.on_request(context, next_call)
-            token.return_value = SimpleNamespace(client_id="alice")
+            token.return_value = identity("alice")
             clock.return_value = 101
             await limiter.on_request(context, next_call)
             with pytest.raises(RateLimitError):

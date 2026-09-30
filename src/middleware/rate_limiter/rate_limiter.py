@@ -2,15 +2,15 @@ import math
 import os
 
 from fastmcp.server.dependencies import get_access_token
+from src.middleware.auth.identity import rate_limit_identity
 from fastmcp.server.middleware import MiddlewareContext
 from fastmcp.server.middleware.rate_limiting import RateLimitingMiddleware
 
 
 def _client_id(context: MiddlewareContext) -> str:
-    # Use the verified identity, not the raw token or a caller-supplied header.
-    # New tokens and sessions for the same developer share the same allowance.
+    # OAuth client_id identifies ChatGPT, not the individual user.
     token = get_access_token()
-    return f"developer:{token.client_id}" if token is not None else "local:shared"
+    return rate_limit_identity(token) if token is not None else "local:shared"
 
 
 def create_rate_limiter() -> RateLimitingMiddleware:

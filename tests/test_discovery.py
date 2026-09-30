@@ -121,7 +121,7 @@ def test_catalog_continues_through_server_capped_pages(include_prerequisites):
     query.execute.side_effect = [SimpleNamespace(data=[{"code": "A"}]),
                                  SimpleNamespace(data=[{"code": "B"}]), SimpleNamespace(data=[])]
     with patch.object(d, "get_supabase") as client:
-        client.return_value.table.return_value = query
+        client.return_value.__enter__.return_value.table.return_value = query
         assert d._catalog(program="CS", include_prerequisites=include_prerequisites) == [{"code": "A"}, {"code": "B"}]
     columns = "code,program,program_name,school,metadata"
     query.select.assert_called_with(columns + (",prerequisites" if include_prerequisites else ""))
