@@ -32,7 +32,7 @@ def main():
     server = create_server()
     server.run(
         transport="http",
-        host=os.environ.get("HOST", "127.0.0.1"),
+        host=os.environ.get("HOST", "0.0.0.0"),
         port=int(os.environ.get("PORT", "8000")),
     )
 
