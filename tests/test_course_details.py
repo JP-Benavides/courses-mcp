@@ -17,7 +17,7 @@ class CourseDetailsTests(unittest.TestCase):
 
     @patch("src.tools.catalog.get_supabase")
     def test_multiple_codes_pagination_and_nested_toon(self, get_client):
-        client = get_client.return_value
+        client = get_client.return_value.__enter__.return_value
         first = {"code": "A", "metadata": {"description": "One, two\nthree", "credits": 4}}
         last = {"code": "B", "metadata": None}
         query = self.make_query(client, [[last], [first], []])
@@ -33,7 +33,7 @@ class CourseDetailsTests(unittest.TestCase):
 
     @patch("src.tools.catalog.get_supabase")
     def test_no_matches(self, get_client):
-        client = get_client.return_value
+        client = get_client.return_value.__enter__.return_value
         self.make_query(client, [[]])
         self.assertEqual(decode(course_details(["Unknown"])), {"courses": [], "unmatched_codes": ["UNKNOWN"]})
 
@@ -42,14 +42,14 @@ class CourseDetailsTests(unittest.TestCase):
         groups = [{"type": "required", "courses": ["PSYCH-UA 1"]}]
         row = {"code": "PSYCH-UA 29", "program": "PSYCH-UA", "program_name": "Psychology",
                "school": "CAS", "metadata": {"title": "Cognition"}, "prerequisites": groups}
-        query = self.make_query(get_client.return_value, [[row], []])
+        query = self.make_query(get_client.return_value.__enter__.return_value, [[row], []])
         result = decode(course_details([" psych-ua\u00a0 29 ", "unknown"]))
         self.assertEqual(result, {"courses": [row], "unmatched_codes": ["UNKNOWN"]})
         query.in_.assert_called_with("code", ["PSYCH-UA 29", "UNKNOWN"])
 
     @patch("src.tools.catalog.get_supabase")
     def test_invalid_codes_fail_before_query(self, get_client):
-        client = get_client.return_value
+        client = get_client.return_value.__enter__.return_value
         for codes in ([], [" "], [None]):
             with self.subTest(codes=codes), self.assertRaises(ValueError):
                 course_details(codes)

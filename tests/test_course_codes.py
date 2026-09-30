@@ -20,7 +20,7 @@ class CourseCodesTests(unittest.TestCase):
 
     @patch("src.tools.catalog.get_supabase")
     def test_every_filter_combination(self, get_client):
-        client = get_client.return_value
+        client = get_client.return_value.__enter__.return_value
         values = {
             "program": "CSCI-UA",
             "program_name": "Computer Science",
@@ -40,7 +40,7 @@ class CourseCodesTests(unittest.TestCase):
 
     @patch("src.tools.catalog.get_supabase")
     def test_pagination_deduplication_and_string_output(self, get_client):
-        client = get_client.return_value
+        client = get_client.return_value.__enter__.return_value
         query = self.make_query(client, [
             [{"code": "B"}, {"code": "A"}],
             [{"code": "B"}, {"code": None}, {"code": " "}],
@@ -57,7 +57,7 @@ class CourseCodesTests(unittest.TestCase):
 
     @patch("src.tools.catalog.get_supabase")
     def test_programs_are_preserved_and_sorted_in_toon(self, get_client):
-        client = get_client.return_value
+        client = get_client.return_value.__enter__.return_value
         first = {"program": "A", "program_name": "Alpha", "school": "School A"}
         last = {"program": "Z", "program_name": "Zeta", "school": "School Z"}
         self.make_query(client, [[last, first, last], []])
@@ -67,13 +67,13 @@ class CourseCodesTests(unittest.TestCase):
 
     @patch("src.tools.catalog.get_supabase")
     def test_no_matches(self, get_client):
-        client = get_client.return_value
+        client = get_client.return_value.__enter__.return_value
         self.make_query(client, [[]])
         self.assertEqual(decode(course_codes(school="Unknown")), {"course_codes": []})
 
     @patch("src.tools.catalog.get_supabase")
     def test_missing_or_blank_filters_fail_before_query(self, get_client):
-        client = get_client.return_value
+        client = get_client.return_value.__enter__.return_value
         for filters in ({}, {"program": None}, {"school": " "},
                         {"program": "CSCI-UA", "program_name": ""}):
             with self.subTest(filters=filters), self.assertRaises(ValueError):
