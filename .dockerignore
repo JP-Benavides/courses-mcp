@@ -1,0 +1,20 @@
+# Only send the files needed to build the application.
+**
+!Dockerfile
+!.dockerignore
+!pyproject.toml
+!uv.lock
+!.python-version
+!README.md
+!src/
+!src/**
+
+# Exclude local state even if it appears inside src.
+**/.env
+**/.env.*
+**/.auth
+**/.git
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
